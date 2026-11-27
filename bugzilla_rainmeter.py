@@ -122,9 +122,9 @@ def main():
 
     entries.sort(key=lambda e: e[0])
 
-    # 状态行：@status|<时间>|<失败源>|<更新>|<缓存>|<失败>
+    # 状态行：@status|<时间>|<失败源>|<失败字样>
     # 文字统一由这里提供，Lua 只做拼接，避免 Lua 源码里的中文经 Bang 传递时乱码。
-    status_line = "@status|%s|%s|更新|缓存|失败:" % (
+    status_line = "@status|%s|%s|失败:" % (
         time.strftime("%m-%d %H:%M"), ",".join(failed))
     lines = [status_line] + [e[1] for e in entries]
 

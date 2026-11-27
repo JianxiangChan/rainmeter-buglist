@@ -1,37 +1,34 @@
 local lastRaw = nil
-local lastCached = false
 
 function Update()
     local raw = SKIN:GetMeasure("MeasureBugList"):GetStringValue()
-    local cached = false
 
     -- Python 还没跑完（或启动/刷新后）时输出为空：先显示上次成功结果的缓存
     if raw == nil or raw == "" then
         raw = readCache()
-        cached = true
         if raw == nil or raw == "" then
             return
         end
     end
 
     -- 内容没变就不重画
-    if raw == lastRaw and cached == lastCached then
+    if raw == lastRaw then
         return
     end
-    lastRaw, lastCached = raw, cached
+    lastRaw = raw
 
     local maxRows = tonumber(SKIN:GetVariable("MaxBug")) or 8
     local index = 1
     local stamp, errs = nil, ""
-    local wUpdated, wCached, wFailed = "", "", ""
+    local wFailed = ""
 
     for line in string.gmatch(raw, "([^\r\n]+)") do
         if string.sub(line, 1, 8) == "@status|" then
-            local s, e, up, ca, fa = string.match(
-                line, "^@status|([^|]*)|([^|]*)|([^|]*)|([^|]*)|(.*)$")
+            local s, e, fa = string.match(
+                line, "^@status|([^|]*)|([^|]*)|(.*)$")
             if s then
                 stamp, errs = s, e or ""
-                wUpdated, wCached, wFailed = up or "", ca or "", fa or ""
+                wFailed = fa or ""
             end
         elseif index <= maxRows then
             renderRow(index, line)
@@ -46,7 +43,7 @@ function Update()
         SKIN:Bang('!HideMeter', 'MeterBug' .. i)
     end
 
-    renderStatus(rows, stamp, errs, cached, wUpdated, wCached, wFailed)
+    renderStatus(rows, stamp, errs, wFailed)
     SKIN:Bang('!Redraw')
 end
 
@@ -70,29 +67,29 @@ function renderRow(index, line)
     SKIN:Bang('!ShowMeter', meter)
 end
 
-function renderStatus(rows, stamp, errs, cached, wUpdated, wCached, wFailed)
-    local label = ""
-    local color = SKIN:GetVariable("ColorMuted")
+function renderStatus(rows, stamp, errs, wFailed)
+    -- 平时不显示状态行；只有数据源查询失败时才用红字提示
+    local show = (errs ~= "")
+    local meter = "MeterStatus"
 
-    if stamp then
-        local word = wUpdated
-        if cached then
-            word = wCached
+    if show then
+        local label = wFailed .. " " .. errs
+        if stamp then
+            label = stamp .. " | " .. label
         end
-        label = word .. " " .. stamp
-        if not cached and errs ~= "" then
-            label = label .. " | " .. wFailed .. " " .. errs
-            color = SKIN:GetVariable("ColorNeed")
-        end
+        SKIN:Bang('!SetOption', meter, 'Text', label)
+        SKIN:Bang('!SetOption', meter, 'FontColor', SKIN:GetVariable("ColorNeed"))
+        SKIN:Bang('!SetOption', meter, 'Y', rows * 20 + 4)
+        SKIN:Bang('!ShowMeter', meter)
+        SKIN:Bang('!UpdateMeter', meter)
+    else
+        SKIN:Bang('!SetOption', meter, 'Y', 0)
+        SKIN:Bang('!HideMeter', meter)
     end
 
-    SKIN:Bang('!SetOption', 'MeterStatus', 'Text', label)
-    SKIN:Bang('!SetOption', 'MeterStatus', 'FontColor', color)
-    SKIN:Bang('!SetOption', 'MeterStatus', 'Y', rows * 20 + 4)
-    SKIN:Bang('!ShowMeter', 'MeterStatus')
-    SKIN:Bang('!UpdateMeter', 'MeterStatus')
     SKIN:Bang('!SetOption', 'Background', 'Shape',
-        'Rectangle 0,0,400,' .. (rows * 20 + 24) .. ',8 | Fill Color 20,20,20,180 | StrokeWidth 0')
+        'Rectangle 0,0,400,' .. (rows * 20 + (show and 24 or 4)) ..
+        ',8 | Fill Color 20,20,20,180 | StrokeWidth 0')
     SKIN:Bang('!UpdateMeter', 'Background')
 end
 

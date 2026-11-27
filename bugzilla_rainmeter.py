@@ -17,6 +17,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.environ.get("BUGLIST_CONFIG") or os.path.join(SCRIPT_DIR, "config.json")
 CACHE_PATH = os.path.join(SCRIPT_DIR, "cache.txt")
 STATE_PATH = os.path.join(SCRIPT_DIR, "state.json")
+ACK_PATH = os.path.join(SCRIPT_DIR, "ack.txt")
 
 # 两个 Bugzilla 共用同一套规则：只显示这些状态。
 # 各站状态名写法不同（RootCaused / Root-Caused、NeedInfo / Need_Info、REOPENED / ReOpen），
@@ -106,9 +107,31 @@ def is_changed(prev_snapshot, bug_id, status, summary):
     if prev_snapshot is None:
         return False
     old = prev_snapshot.get(str(bug_id))
-    return (old is None
-            or old.get("status") != status
-            or old.get("summary") != summary)
+    if old is None:
+        return True
+    if old.get("changed"):
+        return True      # 之前的变化还没被点击确认，继续闪烁
+    return old.get("status") != status or old.get("summary") != summary
+
+
+def read_acks():
+    """读取用户点击过的 bug URL（Lua 在点击时追加写入）。"""
+    try:
+        with open(ACK_PATH, encoding="utf-8", errors="replace") as f:
+            return {line.strip() for line in f if line.strip()}
+    except Exception:
+        return set()
+
+
+def write_acks(urls):
+    try:
+        if urls:
+            with open(ACK_PATH, "w", encoding="utf-8") as f:
+                f.write("\n".join(sorted(urls)) + "\n")
+        elif os.path.exists(ACK_PATH):
+            os.remove(ACK_PATH)
+    except Exception as e:
+        print("写入 ack.txt 失败：%s" % e, file=sys.stderr)
 
 
 def read_cache_lines():
@@ -135,6 +158,8 @@ def main():
     sources = load_sources()
     prev_state = load_state()
     state = dict(prev_state) if prev_state else {}
+    acked = read_acks()
+    seen_urls = set()
 
     entries = []      # (排序键, url, 显示文本, 是否变化)
     failed = []
@@ -154,12 +179,23 @@ def main():
         snapshot = {}
         for bug in bugs:
             summary = " ".join(str(bug.summary).split())  # 压掉换行和多余空白
-            snapshot[str(bug.id)] = {"status": bug.status, "summary": summary}
+            url = "%s%d" % (src["base"], bug.id)
+            seen_urls.add(url)
+
+            changed = is_changed(prev, bug.id, bug.status, summary)
+            if url in acked:      # 用户已经点过这行，不再闪烁
+                changed = False
+
+            snapshot[str(bug.id)] = {
+                "status": bug.status,
+                "summary": summary,
+                "changed": changed,
+            }
             entries.append((
                 (status_priority(bug.status), -int(bug.id)),
-                "%s%d" % (src["base"], bug.id),
+                url,
                 "%s%d-%s (%s)" % (src.get("tag", ""), bug.id, summary, bug.status),
-                is_changed(prev, bug.id, bug.status, summary),
+                changed,
             ))
         state[name] = snapshot
 
@@ -170,13 +206,10 @@ def main():
     status_line = "@status|%s|%s|失败:" % (
         time.strftime("%m-%d %H:%M"), ",".join(failed))
 
-    # 有变化的行在文本前加 "!"，Lua 据此让该行闪烁；缓存里不写标记，避免启动时误闪
+    # 有变化的行在文本前加 "!"，Lua 据此让该行持续闪烁，直到被点击
     live_lines = [status_line] + [
         "%s|%s%s" % (url, "!" if changed else "", text)
         for _, url, text, changed in entries
-    ]
-    clean_lines = [status_line] + [
-        "%s|%s" % (url, text) for _, url, text, _ in entries
     ]
 
     if ok_count == 0:
@@ -185,16 +218,16 @@ def main():
         if cached:
             live_lines = [status_line] + cached
     elif not entries:
-        note = "没有找到分配给你的 Bug。"
-        live_lines.append(note)
-        clean_lines.append(note)
+        live_lines.append("没有找到分配给你的 Bug。")
 
     print("\n".join(live_lines))
 
-    # 至少有一个数据源成功时才覆盖缓存
+    # 至少有一个数据源成功时才覆盖缓存（缓存保留变化标记，刷新后仍会闪烁）
     if ok_count > 0:
-        write_cache("\n".join(clean_lines))
+        write_cache("\n".join(live_lines))
     save_state(state)
+    # 已经确认过的 URL 移出 ack.txt；本轮没查到的保留，等下次再处理
+    write_acks(acked - seen_urls)
 
 
 if __name__ == "__main__":

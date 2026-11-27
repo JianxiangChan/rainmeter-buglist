@@ -2,13 +2,16 @@ local lastRaw = nil
 local maxRows = 8
 local changedRows = {}
 local baseColors = {}
-local blinkTicks = 0
-local blinkOn = false
+local rowUrls = {}
+local hasBlink = false
+local flashOn = false
 
 function Update()
-    -- 闪烁动画（每 0.5 秒切换一次），要先于“内容未变”的提前返回处理
-    if blinkTicks > 0 then
-        tickBlink()
+    -- 有未确认的变化就持续闪烁：每 0.5 秒切换一次灰色背景
+    if hasBlink then
+        flashOn = not flashOn
+        applyFlash()
+        SKIN:Bang('!Redraw')
     end
 
     local raw = SKIN:GetMeasure("MeasureBugList"):GetStringValue()
@@ -33,6 +36,7 @@ function Update()
     local wFailed = ""
     changedRows = {}
     baseColors = {}
+    rowUrls = {}
 
     for line in string.gmatch(raw, "([^\r\n]+)") do
         if string.sub(line, 1, 8) == "@status|" then
@@ -56,7 +60,18 @@ function Update()
     end
 
     renderStatus(rows, stamp, errs, wFailed)
-    startBlinkIfNeeded(rows)
+
+    -- 本次结果里是否有变化行
+    hasBlink = false
+    for i = 1, rows do
+        if changedRows[i] then
+            hasBlink = true
+            break
+        end
+    end
+    flashOn = hasBlink
+    applyFlash()
+
     SKIN:Bang('!Redraw')
 end
 
@@ -74,54 +89,68 @@ function renderRow(index, line)
         text = string.sub(text, 2)
     end
     changedRows[index] = changed
-
-    local color = getColor(text)
-    baseColors[index] = color
+    rowUrls[index] = url
 
     local meter = "MeterBug" .. index
     SKIN:Bang('!SetOption', meter, 'Y', (index - 1) * 20)
     SKIN:Bang('!SetOption', meter, 'Text', text)
     SKIN:Bang('!SetOption', meter, 'ToolTipText', text)  -- 悬停显示完整标题
+    local color = getColor(text)
+    baseColors[index] = color
     SKIN:Bang('!SetOption', meter, 'FontColor', color)
+
+    -- 点击：打开 bug 页面，并停止这一行的闪烁（写入 ack 让 Python 也不再标记）
+    local action = '[!CommandMeasure MeasureLua "StopBlink(' .. index .. ')"]'
     if url then
-        SKIN:Bang('!SetOption', meter, 'LeftMouseUpAction', '["' .. url .. '"]')
-    else
-        SKIN:Bang('!SetOption', meter, 'LeftMouseUpAction', '')
+        action = '["' .. url .. '"]' .. action
     end
+    SKIN:Bang('!SetOption', meter, 'LeftMouseUpAction', action)
     SKIN:Bang('!ShowMeter', meter)
 end
 
-function startBlinkIfNeeded(rows)
-    blinkTicks = 0
-    blinkOn = false
-    for i = 1, rows do
-        if changedRows[i] then
-            blinkOn = true
-            blinkTicks = 6      -- 6 次切换 = 3 秒
-            applyBlink()
-            return
-        end
-    end
-end
-
-function tickBlink()
-    blinkTicks = blinkTicks - 1
-    blinkOn = not blinkOn
-    if blinkTicks <= 0 then
-        blinkTicks = 0
-        blinkOn = false
-    end
-    applyBlink()
-    SKIN:Bang('!Redraw')
-end
-
-function applyBlink()
-    local flash = SKIN:GetVariable("ColorFlash")
+function applyFlash()
+    local gray = SKIN:GetVariable("ColorFlash")
     for i = 1, maxRows do
         if changedRows[i] then
             SKIN:Bang('!SetOption', 'MeterBug' .. i, 'FontColor',
-                blinkOn and flash or baseColors[i])
+                flashOn and gray or baseColors[i])
         end
+    end
+end
+
+function StopBlink(index)
+    -- 记录用户已经看过这一行，避免下一轮查询又闪
+    if rowUrls[index] then
+        ackUrl(rowUrls[index])
+    end
+
+    changedRows[index] = nil
+    if baseColors[index] ~= nil then
+        SKIN:Bang('!SetOption', 'MeterBug' .. index, 'FontColor', baseColors[index])
+    end
+
+    hasBlink = false
+    for i = 1, maxRows do
+        if changedRows[i] then
+            hasBlink = true
+            break
+        end
+    end
+    if not hasBlink then
+        flashOn = false
+    end
+    SKIN:Bang('!Redraw')
+end
+
+function ackUrl(url)
+    local path = SKIN:GetVariable("AckFile")
+    if path == nil or path == "" then
+        return
+    end
+    local f = io.open(path, "a")
+    if f then
+        f:write(url .. "\n")
+        f:close()
     end
 end
 

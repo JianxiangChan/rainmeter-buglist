@@ -7,6 +7,9 @@ cache.txt
 # 上次查询快照（用于检测变化）
 state.json
 
+# 点击确认（停止闪烁）
+ack.txt
+
 # Python
 __pycache__/
 *.py[cod]

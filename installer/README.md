@@ -29,6 +29,7 @@
 - 检测目标机是否已安装 Rainmeter；没有则静默安装 Rainmeter 4.5.28。
 - 把皮肤复制到 Rainmeter 的 `SkinPath\buglist`（默认 `文档\Rainmeter\Skins\buglist`，如果用户改过 `SkinPath` 会按 `Rainmeter.ini` 里的路径）。
 - 安装完成后自动启动 Rainmeter，并反复重试 `!RefreshApp` + `!ActivateConfig`，确保皮肤被加载（首次启动时皮肤索引可能还没就绪）。
+- 通过 `explorer.exe` 以登录用户身份启动，Rainmeter 不会继承安装程序的管理员权限。
 - 默认创建开机自启快捷方式（安装向导中可取消），登录后自动启动并显示。
 - 首次安装时用 `config.example.json` 生成 `config.json`，并打开记事本让用户填写。
 - 安装需要管理员权限（用于静默安装 Rainmeter）。

@@ -40,11 +40,11 @@ Name: "{userstartup}\Buglist"; Filename: "{sys}\wscript.exe"; Parameters: """{ap
 ; 1) 没有 Rainmeter 时静默安装（安装程序已提权）
 Filename: "{tmp}\Rainmeter-4.5.28.exe"; Parameters: "/S"; StatusMsg: "正在安装 Rainmeter 4.5.28..."; Flags: waituntilterminated; Check: not IsRainmeterInstalled
 
-; 2) 启动 Rainmeter 并反复刷新/激活皮肤（首启时皮肤索引可能还没就绪）
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\start_buglist.vbs"""; Flags: runhidden nowait; Check: IsRainmeterInstalled
+; 2) 通过 explorer 以登录用户身份启动 Rainmeter（避免 Rainmeter 继承管理员权限）
+Filename: "{sys}\explorer.exe"; Parameters: """{app}\start_buglist.vbs"""; Flags: nowait; Check: IsRainmeterInstalled
 
 ; 3) 首次安装时打开 config.json，让用户填写账号与 API Key
-Filename: "{sys}\notepad.exe"; Parameters: """{code:GetSkinPath}\buglist\config.json"""; Description: "现在填写 config.json（Bugzilla 地址、账号、API Key）"; Flags: postinstall nowait skipifsilent; Check: IsConfigCreated
+Filename: "{sys}\notepad.exe"; Parameters: """{code:GetSkinPath}\buglist\config.json"""; Description: "现在填写 config.json（Bugzilla 地址、账号、API Key）"; Flags: postinstall nowait skipifsilent runasoriginaluser; Check: IsConfigCreated
 
 [UninstallDelete]
 ; 只清理运行时文件，保留用户填写好的 config.json

@@ -83,6 +83,8 @@
 
 ## 一键安装包
 
+下载地址：<https://github.com/JianxiangChan/rainmeter-buglist/releases>
+
 `installer/` 下提供构建脚本，可生成 `BuglistSetup.exe`：目标机无需预装 Python、python-bugzilla 或 Rainmeter（没有 Rainmeter 时会静默安装）。详见 [installer/README.md](installer/README.md)。
 
 ## 隐私

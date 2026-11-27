@@ -1,0 +1,20 @@
+{
+  "sources": [
+    {
+      "name": "local",
+      "tag": "",
+      "url": "http://bugzilla.example.com/xmlrpc.cgi",
+      "api_key": "YOUR_API_KEY",
+      "base": "http://bugzilla.example.com/show_bug.cgi?id=",
+      "assigned_to": "you@example.com"
+    },
+    {
+      "name": "remote",
+      "tag": "[R]",
+      "url": "https://bugzilla.example.org/bugzilla/xmlrpc.cgi",
+      "api_key": "YOUR_API_KEY",
+      "base": "https://bugzilla.example.org/bugzilla/show_bug.cgi?id=",
+      "assigned_to": "you@example.org"
+    }
+  ]
+}

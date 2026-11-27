@@ -1,0 +1,10 @@
+# 本地配置（含账号、API Key、内网地址），不要提交
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Windows
+Thumbs.db
+desktop.ini

@@ -4,6 +4,9 @@ config.json
 # 运行时缓存
 cache.txt
 
+# 上次查询快照（用于检测变化）
+state.json
+
 # Python
 __pycache__/
 *.py[cod]

@@ -16,6 +16,7 @@ socket.setdefaulttimeout(15)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.environ.get("BUGLIST_CONFIG") or os.path.join(SCRIPT_DIR, "config.json")
 CACHE_PATH = os.path.join(SCRIPT_DIR, "cache.txt")
+STATE_PATH = os.path.join(SCRIPT_DIR, "state.json")
 
 # 两个 Bugzilla 共用同一套规则：只显示这些状态。
 # 各站状态名写法不同（RootCaused / Root-Caused、NeedInfo / Need_Info、REOPENED / ReOpen），
@@ -80,10 +81,40 @@ def fetch(src):
     return bz.query({"assigned_to": src["assigned_to"], "bug_status": statuses})
 
 
+def load_state():
+    """返回上次每个数据源的快照；没有 state.json 时返回 None。"""
+    if not os.path.exists(STATE_PATH):
+        return None
+    try:
+        with open(STATE_PATH, encoding="utf-8") as f:
+            return json.load(f).get("sources", {})
+    except Exception as e:
+        print("读取 state.json 失败：%s" % e, file=sys.stderr)
+        return None
+
+
+def save_state(sources_state):
+    try:
+        with open(STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump({"sources": sources_state}, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print("写入 state.json 失败：%s" % e, file=sys.stderr)
+
+
+def is_changed(prev_snapshot, bug_id, status, summary):
+    """prev_snapshot 为 None（首次运行或新数据源）时不算变化，避免一开始全部闪烁。"""
+    if prev_snapshot is None:
+        return False
+    old = prev_snapshot.get(str(bug_id))
+    return (old is None
+            or old.get("status") != status
+            or old.get("summary") != summary)
+
+
 def read_cache_lines():
     """返回上次成功结果的 bug 行（不含 @status 行）。"""
     try:
-        with open(CACHE_PATH, encoding="utf-8") as f:
+        with open(CACHE_PATH, encoding="mbcs", errors="replace") as f:
             return [l for l in f.read().splitlines()
                     if l and not l.startswith("@status|")]
     except Exception:
@@ -101,24 +132,36 @@ def write_cache(text):
 
 
 def main():
-    entries = []      # (排序键, 输出行)
+    sources = load_sources()
+    prev_state = load_state()
+    state = dict(prev_state) if prev_state else {}
+
+    entries = []      # (排序键, url, 显示文本, 是否变化)
     failed = []
     ok_count = 0
 
-    for src in load_sources():
+    for src in sources:
+        name = src.get("name", "?")
         try:
             bugs = fetch(src)
             ok_count += 1
         except Exception as e:  # 一台挂了不影响另一台
-            failed.append(src.get("name", "?"))
-            print("[%s] %s" % (src.get("name", "?"), e), file=sys.stderr)
+            failed.append(name)
+            print("[%s] %s" % (name, e), file=sys.stderr)
             continue
+
+        prev = None if prev_state is None else prev_state.get(name)
+        snapshot = {}
         for bug in bugs:
             summary = " ".join(str(bug.summary).split())  # 压掉换行和多余空白
-            key = (status_priority(bug.status), -int(bug.id))
-            # 每行格式：<url>|<显示文本>，Lua 按第一个 | 拆开
-            entries.append((key, "%s%d|%s%d-%s (%s)" % (
-                src["base"], bug.id, src.get("tag", ""), bug.id, summary, bug.status)))
+            snapshot[str(bug.id)] = {"status": bug.status, "summary": summary}
+            entries.append((
+                (status_priority(bug.status), -int(bug.id)),
+                "%s%d" % (src["base"], bug.id),
+                "%s%d-%s (%s)" % (src.get("tag", ""), bug.id, summary, bug.status),
+                is_changed(prev, bug.id, bug.status, summary),
+            ))
+        state[name] = snapshot
 
     entries.sort(key=lambda e: e[0])
 
@@ -126,22 +169,32 @@ def main():
     # 文字统一由这里提供，Lua 只做拼接，避免 Lua 源码里的中文经 Bang 传递时乱码。
     status_line = "@status|%s|%s|失败:" % (
         time.strftime("%m-%d %H:%M"), ",".join(failed))
-    lines = [status_line] + [e[1] for e in entries]
+
+    # 有变化的行在文本前加 "!"，Lua 据此让该行闪烁；缓存里不写标记，避免启动时误闪
+    live_lines = [status_line] + [
+        "%s|%s%s" % (url, "!" if changed else "", text)
+        for _, url, text, changed in entries
+    ]
+    clean_lines = [status_line] + [
+        "%s|%s" % (url, text) for _, url, text, _ in entries
+    ]
 
     if ok_count == 0:
         # 全部数据源都失败：保留上次成功的结果，只更新状态行
         cached = read_cache_lines()
         if cached:
-            lines = [status_line] + cached
+            live_lines = [status_line] + cached
     elif not entries:
-        lines.append("没有找到分配给你的 Bug。")
+        note = "没有找到分配给你的 Bug。"
+        live_lines.append(note)
+        clean_lines.append(note)
 
-    output = "\n".join(lines)
-    print(output)
+    print("\n".join(live_lines))
 
     # 至少有一个数据源成功时才覆盖缓存
     if ok_count > 0:
-        write_cache(output)
+        write_cache("\n".join(clean_lines))
+    save_state(state)
 
 
 if __name__ == "__main__":

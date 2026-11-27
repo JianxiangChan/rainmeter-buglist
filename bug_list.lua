@@ -1,6 +1,16 @@
 local lastRaw = nil
+local maxRows = 8
+local changedRows = {}
+local baseColors = {}
+local blinkTicks = 0
+local blinkOn = false
 
 function Update()
+    -- 闪烁动画（每 0.5 秒切换一次），要先于“内容未变”的提前返回处理
+    if blinkTicks > 0 then
+        tickBlink()
+    end
+
     local raw = SKIN:GetMeasure("MeasureBugList"):GetStringValue()
 
     -- Python 还没跑完（或启动/刷新后）时输出为空：先显示上次成功结果的缓存
@@ -17,10 +27,12 @@ function Update()
     end
     lastRaw = raw
 
-    local maxRows = tonumber(SKIN:GetVariable("MaxBug")) or 8
+    maxRows = tonumber(SKIN:GetVariable("MaxBug")) or 8
     local index = 1
     local stamp, errs = nil, ""
     local wFailed = ""
+    changedRows = {}
+    baseColors = {}
 
     for line in string.gmatch(raw, "([^\r\n]+)") do
         if string.sub(line, 1, 8) == "@status|" then
@@ -44,6 +56,7 @@ function Update()
     end
 
     renderStatus(rows, stamp, errs, wFailed)
+    startBlinkIfNeeded(rows)
     SKIN:Bang('!Redraw')
 end
 
@@ -54,17 +67,62 @@ function renderRow(index, line)
         url, text = nil, line
     end
 
+    -- Python 在“相比上次有变化”的行前加了 "!"，这里去掉并记录下来用于闪烁
+    local changed = false
+    if string.sub(text, 1, 1) == "!" then
+        changed = true
+        text = string.sub(text, 2)
+    end
+    changedRows[index] = changed
+
+    local color = getColor(text)
+    baseColors[index] = color
+
     local meter = "MeterBug" .. index
     SKIN:Bang('!SetOption', meter, 'Y', (index - 1) * 20)
     SKIN:Bang('!SetOption', meter, 'Text', text)
     SKIN:Bang('!SetOption', meter, 'ToolTipText', text)  -- 悬停显示完整标题
-    SKIN:Bang('!SetOption', meter, 'FontColor', getColor(text))
+    SKIN:Bang('!SetOption', meter, 'FontColor', color)
     if url then
         SKIN:Bang('!SetOption', meter, 'LeftMouseUpAction', '["' .. url .. '"]')
     else
         SKIN:Bang('!SetOption', meter, 'LeftMouseUpAction', '')
     end
     SKIN:Bang('!ShowMeter', meter)
+end
+
+function startBlinkIfNeeded(rows)
+    blinkTicks = 0
+    blinkOn = false
+    for i = 1, rows do
+        if changedRows[i] then
+            blinkOn = true
+            blinkTicks = 6      -- 6 次切换 = 3 秒
+            applyBlink()
+            return
+        end
+    end
+end
+
+function tickBlink()
+    blinkTicks = blinkTicks - 1
+    blinkOn = not blinkOn
+    if blinkTicks <= 0 then
+        blinkTicks = 0
+        blinkOn = false
+    end
+    applyBlink()
+    SKIN:Bang('!Redraw')
+end
+
+function applyBlink()
+    local flash = SKIN:GetVariable("ColorFlash")
+    for i = 1, maxRows do
+        if changedRows[i] then
+            SKIN:Bang('!SetOption', 'MeterBug' .. i, 'FontColor',
+                blinkOn and flash or baseColors[i])
+        end
+    end
 end
 
 function renderStatus(rows, stamp, errs, wFailed)

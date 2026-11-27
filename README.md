@@ -7,6 +7,7 @@
 - 同时查询多个 Bugzilla 实例
 - 按状态着色，按优先级排序（NeedInfo → Assigned → RootCaused → NEW）
 - 标题过长会截断，鼠标悬停显示完整标题
+- 相比上次查询有变化（新增、状态或标题变化）的 bug 会闪烁 3 秒
 - 查询失败时底部用红字提示（正常时不显示，不占空间）
 - 刷新/启动时先显示上次成功结果的缓存，不会白屏等待
 - 面板高度随实际行数变化
@@ -22,6 +23,7 @@
 | `config.json` | **本地私有配置**（服务器地址、账号、API Key），不提交 |
 | `config.example.json` | 配置模板 |
 | `cache.txt` | 上次成功结果的缓存，运行时生成，不提交 |
+| `state.json` | 上次查询的快照，用于检测变化，运行时生成，不提交 |
 | `.gitignore` | 忽略 `config.json`、`cache.txt` 等本地文件 |
 
 ## 依赖
@@ -66,8 +68,9 @@
 - 只显示"活跃状态"的 bug：`Assigned`、`RootCaused`/`Root-Caused`、`NeedInfo`/`Need_Info`、`NEW`、`ReOpen`/`REOPENED`。
   判断时会把状态名去掉 `-`、`_`、空格并转小写，因此不同 Bugzilla 的状态命名差异无需分别配置。规则见 `bugzilla_rainmeter.py` 的 `ACTIVE_STATUSES`。
 - 已关闭的状态（Closed、Fixed、Verified、WONTFIX 等）不显示。
-- 每 60 秒刷新一次；最多显示 8 行（`bug_list.ini` 的 `MaxBug`）。
+- 每 60 秒查询一次（皮肤本身每 0.5 秒刷新一次用于闪烁动画，Python 不会查得更频繁）；最多显示 8 行（`bug_list.ini` 的 `MaxBug`）。
 - 排序：先按状态优先级，再按 bug id 倒序（新的在前）。
+- 每次查询后与 `state.json` 里的上次快照比较：新增的 bug、状态或标题有变化的 bug 会闪烁 3 秒（白色 ↔ 原状态色）。首次运行（没有 `state.json`）不闪烁。
 
 ## 缓存与失败提示
 

@@ -5,7 +5,7 @@
 [Setup]
 AppId={{8C2F3E71-5B4A-4E2B-9F1C-7A6D5E4C3B21}
 AppName=Buglist for Rainmeter
-AppVersion=1.0.1
+AppVersion=1.0.2
 AppPublisher=JianxiangChan
 DefaultDirName={autopf}\BuglistRainmeter
 DisableProgramGroupPage=yes
@@ -25,22 +25,23 @@ Name: "zhcn"; MessagesFile: "ChineseSimplified.isl"
 Source: "staging\skin\*"; DestDir: "{code:GetSkinPath}\buglist"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; 启动/激活脚本
 Source: "start_buglist.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "start_buglist.vbs"; DestDir: "{app}"; Flags: ignoreversion
 ; 仅在目标机没有 Rainmeter 时用于静默安装
 Source: "rainmeter\Rainmeter-4.5.28.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Tasks]
-Name: "autostart"; Description: "开机自动启动 Rainmeter 并显示 Buglist"; GroupDescription: "附加任务:"; Flags: checkedonce
+Name: "autostart"; Description: "开机自动启动 Rainmeter 并显示 Buglist"; GroupDescription: "附加任务:"
 
 [Icons]
-Name: "{autoprograms}\Buglist"; Filename: "{app}\start_buglist.cmd"; IconFilename: "{code:GetRainmeterExe}"; Comment: "启动 Rainmeter 并显示 Buglist"
-Name: "{userstartup}\Buglist"; Filename: "{app}\start_buglist.cmd"; IconFilename: "{code:GetRainmeterExe}"; Comment: "开机启动 Rainmeter 并显示 Buglist"; Tasks: autostart
+Name: "{autoprograms}\Buglist"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start_buglist.vbs"""; IconFilename: "{code:GetRainmeterExe}"; Comment: "启动 Rainmeter 并显示 Buglist"
+Name: "{userstartup}\Buglist"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\start_buglist.vbs"""; IconFilename: "{code:GetRainmeterExe}"; Comment: "开机启动 Rainmeter 并显示 Buglist"; Tasks: autostart
 
 [Run]
 ; 1) 没有 Rainmeter 时静默安装（安装程序已提权）
 Filename: "{tmp}\Rainmeter-4.5.28.exe"; Parameters: "/S"; StatusMsg: "正在安装 Rainmeter 4.5.28..."; Flags: waituntilterminated; Check: not IsRainmeterInstalled
 
 ; 2) 启动 Rainmeter 并反复刷新/激活皮肤（首启时皮肤索引可能还没就绪）
-Filename: "{app}\start_buglist.cmd"; Flags: runhidden nowait; Check: IsRainmeterInstalled
+Filename: "{sys}\wscript.exe"; Parameters: """{app}\start_buglist.vbs"""; Flags: runhidden nowait; Check: IsRainmeterInstalled
 
 ; 3) 首次安装时打开 config.json，让用户填写账号与 API Key
 Filename: "{sys}\notepad.exe"; Parameters: """{code:GetSkinPath}\buglist\config.json"""; Description: "现在填写 config.json（Bugzilla 地址、账号、API Key）"; Flags: postinstall nowait skipifsilent; Check: IsConfigCreated

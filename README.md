@@ -81,6 +81,10 @@
 - 所有数据源都失败时，继续显示上一次成功的列表，并显示红色失败提示。
 - 缓存使用系统 ANSI 编码写入（Rainmeter 的 Lua 通道按 ANSI 解释字符串），因此中文系统显示最佳。
 
+## 一键安装包
+
+`installer/` 下提供构建脚本，可生成 `BuglistSetup.exe`：目标机无需预装 Python、python-bugzilla 或 Rainmeter（没有 Rainmeter 时会静默安装）。详见 [installer/README.md](installer/README.md)。
+
 ## 隐私
 
 `config.json` 含有账号与 API Key，已被 `.gitignore` 排除，不会被提交。请勿提交；如果不慎泄露，请到 Bugzilla 的 API Keys 页面吊销并重新生成。

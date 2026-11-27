@@ -10,6 +10,12 @@ state.json
 # 点击确认（停止闪烁）
 ack.txt
 
+# 安装包构建产物
+installer/build/
+installer/staging/
+installer/Output/
+installer/rainmeter/
+
 # Python
 __pycache__/
 *.py[cod]

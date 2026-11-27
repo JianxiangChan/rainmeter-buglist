@@ -14,6 +14,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 socket.setdefaulttimeout(15)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    # PyInstaller 单文件模式下 __file__ 指向临时解压目录，配置/缓存应放在 exe 旁边
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(sys.executable))
 CONFIG_PATH = os.environ.get("BUGLIST_CONFIG") or os.path.join(SCRIPT_DIR, "config.json")
 CACHE_PATH = os.path.join(SCRIPT_DIR, "cache.txt")
 STATE_PATH = os.path.join(SCRIPT_DIR, "state.json")

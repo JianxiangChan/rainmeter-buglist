@@ -81,8 +81,21 @@ def fetch(src):
               file=sys.stderr)
         statuses = FALLBACK_STATUSES
     if not statuses:
-        return []
-    return bz.query({"assigned_to": src["assigned_to"], "bug_status": statuses})
+        return [], {}
+
+    bugs = bz.query({"assigned_to": src["assigned_to"], "bug_status": statuses})
+
+    # 再取一次评论数，用于检测“有新评论”
+    comment_counts = {}
+    if bugs:
+        try:
+            result = bz._proxy.Bug.comments({"ids": [int(b.id) for b in bugs]})
+            for bug_id, data in result.get("bugs", {}).items():
+                comment_counts[str(bug_id)] = len(data.get("comments", []))
+        except Exception as e:
+            print("[%s] 获取评论失败，退回 last_change_time：%s"
+                  % (src.get("name", "?"), e), file=sys.stderr)
+    return bugs, comment_counts
 
 
 def load_state():
@@ -105,7 +118,7 @@ def save_state(sources_state):
         print("写入 state.json 失败：%s" % e, file=sys.stderr)
 
 
-def is_changed(prev_snapshot, bug_id, status, summary):
+def is_changed(prev_snapshot, bug_id, status, summary, comment_count=None, last_change=None):
     """prev_snapshot 为 None（首次运行或新数据源）时不算变化，避免一开始全部闪烁。"""
     if prev_snapshot is None:
         return False
@@ -114,7 +127,17 @@ def is_changed(prev_snapshot, bug_id, status, summary):
         return True
     if old.get("changed"):
         return True      # 之前的变化还没被点击确认，继续闪烁
-    return old.get("status") != status or old.get("summary") != summary
+    if old.get("status") != status or old.get("summary") != summary:
+        return True
+    old_count = old.get("comment_count")
+    if old_count is not None and comment_count is not None and old_count != comment_count:
+        return True      # 有新评论（或评论被删）
+    if comment_count is None:
+        # 评论接口不可用时，退回 last_change_time（任何修改都会变）
+        old_lc = old.get("last_change")
+        if old_lc is not None and last_change is not None and old_lc != last_change:
+            return True
+    return False
 
 
 def read_acks():
@@ -171,7 +194,7 @@ def main():
     for src in sources:
         name = src.get("name", "?")
         try:
-            bugs = fetch(src)
+            bugs, comment_counts = fetch(src)
             ok_count += 1
         except Exception as e:  # 一台挂了不影响另一台
             failed.append(name)
@@ -185,13 +208,20 @@ def main():
             url = "%s%d" % (src["base"], bug.id)
             seen_urls.add(url)
 
-            changed = is_changed(prev, bug.id, bug.status, summary)
+            comment_count = comment_counts.get(str(bug.id))
+            lc = getattr(bug, "last_change_time", None)
+            last_change = str(lc) if lc else None
+
+            changed = is_changed(prev, bug.id, bug.status, summary,
+                                 comment_count, last_change)
             if url in acked:      # 用户已经点过这行，不再闪烁
                 changed = False
 
             snapshot[str(bug.id)] = {
                 "status": bug.status,
                 "summary": summary,
+                "comment_count": comment_count,
+                "last_change": last_change,
                 "changed": changed,
             }
             entries.append((

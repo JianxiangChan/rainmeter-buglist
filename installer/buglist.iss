@@ -5,7 +5,7 @@
 [Setup]
 AppId={{8C2F3E71-5B4A-4E2B-9F1C-7A6D5E4C3B21}
 AppName=Buglist for Rainmeter
-AppVersion=1.0.2
+AppVersion=1.0.3
 AppPublisher=JianxiangChan
 DefaultDirName={autopf}\BuglistRainmeter
 DisableProgramGroupPage=yes
